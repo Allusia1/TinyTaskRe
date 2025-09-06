@@ -1144,11 +1144,11 @@ class TinyTaskApp:
             except Exception:
                 pass
             self.overlay.show_note(f"Sent Ctrl+A, Ctrl+P")
-            self.watcher.stop()
+            # Keep watching; cooldown is handled in the detection loop
             try:
-                self.watch_btn.configure(text="Start Watch")
+                self.watch_btn.configure(text="Stop Watch")
             except Exception:
-                self.watch_btn.config(text="Start Watch")
+                self.watch_btn.config(text="Stop Watch")
         threading.Thread(target=show_sequence, daemon=True).start()
 
     def _on_browse_folder(self) -> None:
