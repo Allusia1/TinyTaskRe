@@ -1137,13 +1137,11 @@ class TinyTaskApp:
             # Give focus to target after the click performed by the watcher
             time.sleep(0.05)
             try:
-                # Perform actual key combos
-                pyautogui.hotkey("ctrl", "a")
-                time.sleep(0.05)
-                pyautogui.hotkey("ctrl", "p")
+                # Perform actual key combo: Ctrl + M
+                pyautogui.hotkey("ctrl", "m")
             except Exception:
                 pass
-            self.overlay.show_note(f"Sent Ctrl+A, Ctrl+P")
+            self.overlay.show_note("Sent Ctrl+M")
             # Keep watching; cooldown is handled in the detection loop
             try:
                 self.watch_btn.configure(text="Stop Watch")
