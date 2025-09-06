@@ -844,19 +844,48 @@ class ImageWatcher:
                 self._is_running = False
                 return
             # PyAutoGUI-only scanning loop for max speed
+            pyautogui.PAUSE = 0
+            try:
+                pyautogui.FAILSAFE = False
+            except Exception:
+                pass
+
+            last_click_ts = 0.0
+            debounce_s = 0.3
+
             while not self._stop_event.is_set():
-                hit: Optional[str] = None
+                hit_path: Optional[str] = None
                 for path in self._template_files:
                     try:
-                        # pyautogui internally caches screenshots per call and uses OpenCV for confidence
-                        if pyautogui.locateOnScreen(path, grayscale=True, confidence=self._ratio) is not None:
-                            hit = path
+                        box = pyautogui.locateOnScreen(path, grayscale=True, confidence=self._ratio)
+                        if box is None:
+                            continue
+                        # Strict verification on a small expanded region
+                        l, t, w, h = box
+                        pad = max(6, int(min(w, h) * 0.15))
+                        region = (max(0, l - pad), max(0, t - pad), w + 2 * pad, h + 2 * pad)
+                        strict_conf = min(0.98, max(self._ratio + 0.15, 0.90))
+                        box2 = pyautogui.locateOnScreen(path, grayscale=True, confidence=strict_conf, region=region)
+                        if box2 is None:
+                            continue
+                        # Double-check consecutive frame
+                        box3 = pyautogui.locateOnScreen(path, grayscale=True, confidence=strict_conf, region=region)
+                        if box3 is None:
+                            continue
+                        # Debounce and click center
+                        now = time.perf_counter()
+                        if now - last_click_ts < debounce_s:
+                            hit_path = path
                             break
+                        # Do not move or click; just trigger hotkeys via _on_image_detected
+                        last_click_ts = now
+                        hit_path = path
+                        break
                     except Exception:
                         continue
-                if hit is not None:
+                if hit_path is not None:
                     try:
-                        self._on_detect(hit)
+                        self._on_detect(hit_path)
                     finally:
                         break
                 time.sleep(0.0005)
@@ -866,7 +895,12 @@ class ImageWatcher:
     def start(self) -> bool:
         if self._is_running:
             return True
-        if cv2 is None or ImageGrab is None or np is None:
+        # Allow starting even without cv2/ImageGrab; pyautogui path requires only pyautogui
+        if pyautogui is None:
+            return False
+        # Ensure we have templates to look for before spinning the thread
+        self._load_templates()
+        if not getattr(self, "_template_files", []):
             return False
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True)
@@ -1091,13 +1125,16 @@ class TinyTaskApp:
         # Run on background thread; marshal to main thread
         def show_sequence() -> None:
             self._log(f"Detected: {Path(path).name}")
-            self.overlay.show_note("Detected image")
-            time.sleep(0.3)
-            self.overlay.show_note("Simulate: Ctrl + A")
-            time.sleep(0.6)
-            self.overlay.show_note("Simulate: Ctrl + P")
-            time.sleep(0.6)
-            self.overlay.show_note(f"Done ({Path(path).name})")
+            # Give focus to target after the click performed by the watcher
+            time.sleep(0.05)
+            try:
+                # Perform actual key combos
+                pyautogui.hotkey("ctrl", "a")
+                time.sleep(0.05)
+                pyautogui.hotkey("ctrl", "p")
+            except Exception:
+                pass
+            self.overlay.show_note(f"Sent Ctrl+A, Ctrl+P")
             self.watcher.stop()
             try:
                 self.watch_btn.configure(text="Start Watch")
