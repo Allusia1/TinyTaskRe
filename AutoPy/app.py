@@ -852,8 +852,14 @@ class ImageWatcher:
 
             last_click_ts = 0.0
             debounce_s = 0.3
+            cooldown_until = 0.0  # after a detection, wait 10s
 
             while not self._stop_event.is_set():
+                # Handle cooldown after a successful detection
+                now_time = time.perf_counter()
+                if now_time < cooldown_until:
+                    time.sleep(min(0.1, cooldown_until - now_time))
+                    continue
                 hit_path: Optional[str] = None
                 for path in self._template_files:
                     try:
@@ -886,8 +892,11 @@ class ImageWatcher:
                 if hit_path is not None:
                     try:
                         self._on_detect(hit_path)
-                    finally:
-                        break
+                    except Exception:
+                        pass
+                    # Enter 10s cooldown before next detection
+                    cooldown_until = time.perf_counter() + 10.0
+                    continue
                 time.sleep(0.0005)
         finally:
             self._is_running = False
